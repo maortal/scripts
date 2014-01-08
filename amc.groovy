@@ -2,6 +2,9 @@
 def input = []
 def failOnError = _args.conflict == 'fail'
 
+if(ut_label=="IGNORE") { 
+	System.exit(0) 
+}
 // print input parameters
 _args.bindings?.each{ _log.fine("Parameter: $it.key = $it.value") }
 args.each{ _log.fine("Argument: $it") }
@@ -41,9 +44,9 @@ def minFileSize = tryQuietly{ minFileSize.toLong() }; if (minFileSize == null) {
 
 // series/anime/movie format expressions
 def format = [
-	tvs:   tryQuietly{ seriesFormat } ?: '''TV Shows/{n}/{episode.special ? "Special" : "Season "+s.pad(2)}/{n} - {episode.special ? "S00E"+special.pad(2) : s00e00} - {t.replaceAll(/[`´‘’ʻ]/, "'").replaceAll(/[!?.]+$/).replacePart(', Part $1')}{".$lang"}''',
-	anime: tryQuietly{ animeFormat  } ?: '''Anime/{n}/{n} - {sxe} - {t.replaceAll(/[!?.]+$/).replaceAll(/[`´‘’ʻ]/, "'").replacePart(', Part $1')}''',
-	mov:   tryQuietly{ movieFormat  } ?: '''Movies/{n} ({y})/{n} ({y}){" CD$pi"}{".$lang"}''',
+	tvs:   tryQuietly{ seriesFormat } ?: '''TV Shows/{n}/{episode.special ? "Special" : "Season "+s}/''' + ut_title,
+	anime: tryQuietly{ animeFormat  } ?: '''Anime/{n}/{n} - {sxe} - {t.replaceAll(/[!?.]+$/).replaceAll(/[`´‘’?]/, "'").replacePart(', Part $1')}''',
+	mov:   tryQuietly{ movieFormat  } ?: '''Movies/{n} ({y})/''' + ut_title,
 	music: tryQuietly{ musicFormat  } ?: '''Music/{n}/{album+'/'}{pi.pad(2)+'. '}{artist} - {t}'''
 ]
 
@@ -96,7 +99,7 @@ def extractedArchives = []
 def tempFiles = []
 input = input.flatten{ f ->
 	if (f.isArchive() || f.hasExtension('001')) {
-		def extractDir = new File(f.dir, f.nameWithoutExtension)
+		def extractDir = new File("C:/Users/XBMC/Videos/${ut_title}")
 		def extractFiles = extract(file: f, output: new File(extractDir, f.dir.name), conflict: 'skip', filter: { it.isArchive() || it.isVideo() || it.isSubtitle() || (music && it.isAudio()) }, forceExtractAll: true) ?: []
 		
 		if (extractFiles.size() > 0) {
@@ -133,7 +136,7 @@ if (excludeList) {
 input.each{ f -> _log.finest("Input: $f") }
 
 // artwork/nfo utility
-if (artwork || xbmc || plex) { include('fn:lib/htpc') }
+if (artwork || xbmc || plex) { include('htpc') }
 
 // group episodes/movies and rename according to XBMC standards
 def groups = input.groupBy{ f ->
@@ -267,22 +270,16 @@ if (getRenameLog().isEmpty()) {
 	return
 }
 
-// run program on newly processed files
-if (exec) {
-	getRenameLog().each{ from, to ->
-		def command = getMediaInfo(format: exec, file: to)
-		_log.finest("Execute: $command")
-		execute(command)
-	}
-}
 
 // make XMBC scan for new content and display notification message
 if (xbmc) {
 	xbmc.each{ host ->
 		_log.info "Notify XBMC: $host"
 		_guarded{
-			showNotification(host, 9090, 'FileBot', "Finished processing ${tryQuietly { ut_title } ?: input*.dir.name.unique()} (${getRenameLog().size()} files).", 'http://www.filebot.net/images/icon.png')
-			scanVideoLibrary(host, 9090)
+
+			showNotification(host, 6767, 'FileBot', "Finished processing ${tryQuietly { ut_title } ?: input*.dir.name.unique()} (${getRenameLog().size()} files).", 'http://www.filebot.net/images/icon.png')
+
+			scanVideoLibrary(host, 6767)
 		}
 	}
 }
@@ -358,7 +355,6 @@ if (deleteAfterExtract) {
 }
 
 // clean empty folders, clutter files, etc after move
-if (clean) {
 	if (['COPY', 'HARDLINK'].find{ it.equalsIgnoreCase(_args.action) } && tempFiles.size() > 0) {
 		_log.info 'Clean temporary extracted files'
 		// delete extracted files
@@ -372,14 +368,10 @@ if (clean) {
 			if (it.getFiles().isEmpty()) it.deleteDir()
 		}
 	}
-	
 	// deleting remaining files only makes sense after moving files
 	if ('MOVE'.equalsIgnoreCase(_args.action)) {
 		def cleanerInput = !args.empty ? args : ut_kind == 'multi' && ut_dir ? [ut_dir as File] : []
 		cleanerInput = cleanerInput.findAll{ f -> f.exists() }
-		if (cleanerInput.size() > 0) {
-			_log.info 'Clean clutter files and empty folders'
-			executeScript('fn:cleaner', args.empty ? [root:true] : [root:false], cleanerInput)
-		}
+		_log.info 'Clean clutter files and empty folders'
+		executeScript('cleaner', [root:true] , "C:/Users/XBMC/Videos/${ut_title}")
 	}
-}
